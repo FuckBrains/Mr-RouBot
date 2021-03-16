@@ -12,7 +12,8 @@ class MailHelper:
     def __init__(self, receiver_email, subject):
         self.smtp_server = Config.get_secret("SMTP_SERVER")
         self.sender_email = Config.get_secret("SENDER_EMAIL")
-        self.server = smtplib.SMTP(self.smtp_server)
+        if Config.get_secret("WORKING_ENV") == "PROD":
+            self.server = smtplib.SMTP(self.smtp_server)
         self.receiver_email = receiver_email
         self.subject = subject
         self.is_ok = True
@@ -42,7 +43,9 @@ class MailHelper:
         Envoi du mail et fermeture du serveur.
         """
         try:
-            self.server.sendmail(self.sender_email, self.receiver_email.split(','), self.create_mail().as_string())
+            # Todo à utiliser plutard en prod ("python -m smtpd -c DebuggingServer -n localhost:1025")
+            if Config.get_secret("WORKING_ENV") == "PROD":
+                self.server.sendmail(self.sender_email, self.receiver_email.split(','), self.create_mail().as_string())
         except Exception as e:
             # Print any error messages to stdout
             print(f"Probleme lors de l'envoi du mail: {e}")

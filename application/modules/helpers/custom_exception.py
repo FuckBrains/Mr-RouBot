@@ -10,7 +10,7 @@ class EmptyDirException(Exception):
         super(EmptyDirException, self).__init__('Aucun fichier présent dans le dossier')
 
 
-class SshCmdException(Exception):
+class NoYoutubeVideo(Exception):
     """Empty directory exception"""
     def __init__(self):
-        super(SshCmdException, self).__init__('Ssh cmd error: ')
+        super(NoYoutubeVideo, self).__init__('Aucune nouvelle vidéo à créer')

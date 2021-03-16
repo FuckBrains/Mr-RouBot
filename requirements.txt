@@ -1,3 +1,4 @@
+pytube
 cx-Oracle==8.1.0
 greenlet==1.0.0
 importlib-metadata==3.7.3
