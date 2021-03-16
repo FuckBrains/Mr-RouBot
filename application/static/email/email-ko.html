@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="fr" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title th:remove="all">Template for HTML email (simple)</title>
+    <meta content="text/html; charset=UTF-8" http-equiv="Content-Type"/>
+</head>
+<body>
+<p>
+    Bonjour,
+</p>
+<p>
+    Une erreur s'est produite lors du traitement :
+</p>
+<p>
+    <span th:text="${contentMessage}"></span>
+</p>
+<p>
+    Cordialement,
+</p>
+<p>
+    L'équipe DSI Sourcing Elec.
+</p>
+<p>
+    La réponse à ce mail sera faite à : <a href="mailto:dc-dsi-agregateur-elec-eclt-support@edf.fr">DC-DSI-AGREGATEUR-ELEC-ECLT-SUPPORT</a>
+</p>
+</body>
+</html>
