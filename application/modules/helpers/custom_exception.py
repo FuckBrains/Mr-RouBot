@@ -10,7 +10,7 @@ class EmptyDirException(Exception):
         super(EmptyDirException, self).__init__('Aucun fichier présent dans le dossier')
 
 
-class NoYoutubeVideo(Exception):
+class NoNewYoutubeVideo(Exception):
     """Empty directory exception"""
     def __init__(self):
-        super(NoYoutubeVideo, self).__init__('Aucune nouvelle vidéo à créer')
+        super(NoNewYoutubeVideo, self).__init__('Aucune nouvelle vidéo à créer')
