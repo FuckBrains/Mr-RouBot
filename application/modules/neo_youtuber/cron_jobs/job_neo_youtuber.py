@@ -13,17 +13,18 @@ def job_neo_youtuber():
 
     try:
 
-        neo_youtuber.get_last_video_url_and_title(youtube_helper=youtube)
+        '''neo_youtuber.get_last_video_url_and_title(youtube_helper=youtube)
         neo_youtuber.check_if_video_already_exist()
 
         if not neo_youtuber.is_new_video:
             raise NoNewYoutubeVideo
 
         neo_youtuber.retreive_last_video()
-        neo_youtuber.retreive_thumbnail()
-        neo_youtuber.cut_and_create_new_video()
+        neo_youtuber.cut_video_by_scenes()
+        neo_youtuber.shuffle_and_create_new_video()'''
         neo_youtuber.create_new_thumbnail()
-        neo_youtuber.upload_to_youtuber()
+        '''neo_youtuber.upload_to_youtuber()
+        neo_youtuber.update_database()'''
 
     except NoNewYoutubeVideo as e:
         logging.warning(e)

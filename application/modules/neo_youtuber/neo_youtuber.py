@@ -1,12 +1,17 @@
 import json
 import logging
 import os
-import requests
-import urllib.request
+import glob
+import random
+from PIL import Image, ImageDraw, ImageFont
+
 import pytube
+from moviepy.video.io.ffmpeg_tools import ffmpeg_extract_subclip
+from moviepy.editor import concatenate_videoclips, VideoFileClip
 
 from application.config.config import Config
 from application.modules.base_module.base_module import BaseModule
+from application.modules.helpers.utils import find_scenes, to_secondes
 from application.modules.helpers.youtube_helper import YoutubeHelper
 
 
@@ -21,10 +26,16 @@ class NeoYoutuber(BaseModule):
         self.thumbnail_url = None
         self.path_to_videos = f"{self.path_to_elements}/videos"
         self.path_to_thumbnails = f"{self.path_to_elements}/thumbnails"
+        self.path_to_cutted_videos = f"{self.path_to_elements}/cutted_videos"
+        self.path_to_final_result_videos = f"{self.path_to_elements}/final_result_videos"
+        self.path_to_cat_dog_dataset = f"{self.path_to_elements}/cat_dog_dataset/PetImages"
+        self.path_to_intro = f"{self.path_to_elements}/intro_outro"
         self.yt_id_to_steal_from = "UCzn2gx8zzhF0A4Utk8TEDNQ"
         self.yt_url_to_steal_from = "https://www.youtube.com/channel/UCzn2gx8zzhF0A4Utk8TEDNQ"
         self.yt_api_key = Config.get_secret("yt_api_key")
         self.database = None
+        self.number_of_scenes = 0
+        self.cutted_videos = []
 
     def get_last_video_url_and_title(self, youtube_helper: YoutubeHelper):
         try:
@@ -53,12 +64,6 @@ class NeoYoutuber(BaseModule):
         except Exception as e:
             logging.error(e)
 
-    def retreive_thumbnail(self):
-        try:
-            urllib.request.urlretrieve(self.thumbnail_url, f"{self.path_to_thumbnails}/{self.last_video_id}.jpg")
-        except Exception as e:
-            logging.error(e)
-
     def retreive_last_video(self):
         try:
             py_youtube = pytube.YouTube(self.last_video_url)
@@ -68,13 +73,73 @@ class NeoYoutuber(BaseModule):
         except Exception as e:
             logging.error(e)
 
-    def cut_and_create_new_video(self):
-        pass
+    def cut_video_by_scenes(self):
+        try:
+            scenes = find_scenes(video_path=f"{self.path_to_videos}/{self.last_video_id}.mp4", threshold=60.0)
+            self.number_of_scenes = len(scenes[5:-5])
+            for index, scene in enumerate(scenes[5:-5]):
+                start_scene_seconds = to_secondes(time=str(scene[0]), time_format="%H:%M:%S.%f")
+                end_scene_seconds = to_secondes(time=str(scene[1]), time_format="%H:%M:%S.%f")
+                if int(end_scene_seconds) - int(start_scene_seconds) < 10:
+                    continue
+                # Enlever les deux premières secondes pour corriger les erreurs de cuts
+                start_scene_seconds = start_scene_seconds + 2
+                ffmpeg_extract_subclip(filename=f"{self.path_to_videos}/{self.last_video_id}.mp4",
+                                       t1=start_scene_seconds, t2=end_scene_seconds,
+                                       targetname=f"{self.path_to_cutted_videos}/{self.last_video_id}_{index}.mp4")
+                self.cutted_videos.append(f"{self.last_video_id}_{index}")
+        except Exception as e:
+            logging.error(e)
+
+    def shuffle_and_create_new_video(self):
+        try:
+            clips = [VideoFileClip(f"{self.path_to_intro}/intro.mp4")]
+            shuffled_sub_videos = random.sample(self.cutted_videos, len(self.cutted_videos))
+            for sub_video in shuffled_sub_videos:
+                clips.append(VideoFileClip(f"{self.path_to_cutted_videos}/{sub_video}.mp4"))
+            final_result_video = concatenate_videoclips(clips=clips)
+            final_result_video.write_videofile(f"{self.path_to_final_result_videos}/new_{self.last_video_id}.mp4")
+        except Exception as e:
+            logging.error(e)
+
+    def create_new_thumbnail(self):
+        cat_or_dog = random.choice(['Cat', 'Dog'])
+        images = glob.glob(f"{self.path_to_cat_dog_dataset}/{cat_or_dog}/*.jpg")
+        thumbnail = random.choice(images)
+        thumbnail_img = Image.open(thumbnail)
+        width, height = thumbnail_img.size
+        draw = ImageDraw.Draw(thumbnail_img)
+        # font = ImageFont.truetype(<font-file>, <font-size>)
+        font = ImageFont.truetype(f"{os.getcwd()}/application/static/fonts/newsserifbold.ttf", 30)
+        # draw.text((x, y),"Sample Text",(r,g,b))
+        rect_color = "#fca311"
+        text_color = "#14213d"
+        draw.rectangle(((20, height-52), (470, height-25)), fill="#e5e5e5")
+        draw.rectangle(((0, 0), (10, height)), fill=rect_color)
+        draw.rectangle(((0, 0), (width, 10)), fill=rect_color)
+        draw.rectangle(((width, 0), (width-10, height)), fill=rect_color)
+        draw.rectangle(((0, height), (width, height - 10)), fill=rect_color)
+
+        with open(f'{os.getcwd()}/roubot_dabatase.json') as database:
+            data = json.load(database)
+        data.get('neo_youtuber')['thumbnail_number'] += 1
+        draw.text((30, height-50), f"FUNNY TIKTOK ANIMALS #{data.get('neo_youtuber').get('thumbnail_number')}",
+                  text_color, font=font)
+        thumbnail_img.save(f"{self.path_to_thumbnails}/{data.get('neo_youtuber').get('thumbnail_number')}.jpg")
+
+        with open(f'{os.getcwd()}/roubot_dabatase.json', 'w') as database:
+            json.dump(data, database)
 
     def upload_to_youtuber(self):
         pass
 
-    def create_new_thumbnail(self):
-        pass
-
-
+    def update_database(self):
+        try:
+            with open(f'{os.getcwd()}/roubot_dabatase.json') as database:
+                data = json.load(database)
+            data.get('neo_youtuber').get('all_added_videos').append(self.last_video_id)
+            with open(f'{os.getcwd()}/roubot_dabatase.json', 'w') as database:
+                json.dump(data, database)
+            print('update_database')
+        except Exception as e:
+            logging.error(e)
