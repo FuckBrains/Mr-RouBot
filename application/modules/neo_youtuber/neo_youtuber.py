@@ -13,6 +13,7 @@ from application.config.config import Config
 from application.modules.base_module.base_module import BaseModule
 from application.modules.helpers.utils import find_scenes, to_secondes
 from application.modules.helpers.youtube_helper import YoutubeHelper
+from application.modules.helpers.json_database import JsonDatabase
 
 
 class NeoYoutuber(BaseModule):
@@ -36,31 +37,39 @@ class NeoYoutuber(BaseModule):
         self.database = None
         self.number_of_scenes = 0
         self.cutted_videos = []
+        self.database_table_name = "neo_youtuber.json"
+        self.max_search_result = 1
+        self.search_response = None
 
-    def get_last_video_url_and_title(self, youtube_helper: YoutubeHelper):
+    def search_videos(self, youtube_helper: YoutubeHelper):
         try:
             request = youtube_helper.youtube.search().list(
                 part="snippet",
-                maxResults=1,
+                maxResults=self.max_search_result,
                 channelId=self.yt_id_to_steal_from,
                 order="date"
             )
-            response = request.execute()
-            self.last_video_title = response.get('items')[0].get('snippet').get('title')
-            self.last_video_id = response.get('items')[0].get('id').get('videoId')
+            self.search_response = request.execute()
+            print('search_videos: DONE')
+        except Exception as e:
+            logging.error(e)
+
+    def get_last_video_url_and_title(self, item_number: int):
+        try:
+            self.last_video_title = self.search_response.get('items')[item_number].get('snippet').get('title')
+            self.last_video_id = self.search_response.get('items')[item_number].get('id').get('videoId')
             self.last_video_url = f"https://www.youtube.com/watch?v={self.last_video_id}"
-            self.thumbnail_url = response.get('items')[0].get('snippet').get('thumbnails').get('high').get('url')
-            print('get_last_video_url_and_title')
+            self.thumbnail_url = self.search_response.get('items')[item_number].get('snippet').get('thumbnails').get('high').get('url')
+            print('get_last_video_url_and_title: DONE')
         except Exception as e:
             logging.error(e)
 
     def check_if_video_already_exist(self):
         try:
-            with open(f'{os.getcwd()}/roubot_dabatase.json') as database:
-                data = json.load(database)
-                if self.last_video_id not in data.get('neo_youtuber').get('all_added_videos'):
-                    self.is_new_video = True
-            print('check_if_video_already_exist')
+            data = JsonDatabase.retrieve_database(json_file=self.database_table_name)
+            if self.last_video_id not in data.get('neo_youtuber').get('all_added_videos'):
+                self.is_new_video = True
+            print('check_if_video_already_exist: DONE')
         except Exception as e:
             logging.error(e)
 
@@ -69,18 +78,18 @@ class NeoYoutuber(BaseModule):
             py_youtube = pytube.YouTube(self.last_video_url)
             video = py_youtube.streams.get_highest_resolution()
             video.download(self.path_to_videos, filename=self.last_video_id)
-            print('retreive_last_video')
+            print('retreive_last_video: DONE')
         except Exception as e:
             logging.error(e)
 
     def cut_video_by_scenes(self):
         try:
-            scenes = find_scenes(video_path=f"{self.path_to_videos}/{self.last_video_id}.mp4", threshold=60.0)
+            scenes = find_scenes(video_path=f"{self.path_to_videos}/{self.last_video_id}.mp4", threshold=50.0)
             self.number_of_scenes = len(scenes[5:-5])
             for index, scene in enumerate(scenes[5:-5]):
                 start_scene_seconds = to_secondes(time=str(scene[0]), time_format="%H:%M:%S.%f")
                 end_scene_seconds = to_secondes(time=str(scene[1]), time_format="%H:%M:%S.%f")
-                if int(end_scene_seconds) - int(start_scene_seconds) < 10:
+                if int(end_scene_seconds) - int(start_scene_seconds) < 15:
                     continue
                 # Enlever les deux premières secondes pour corriger les erreurs de cuts
                 start_scene_seconds = start_scene_seconds + 2
@@ -88,6 +97,7 @@ class NeoYoutuber(BaseModule):
                                        t1=start_scene_seconds, t2=end_scene_seconds,
                                        targetname=f"{self.path_to_cutted_videos}/{self.last_video_id}_{index}.mp4")
                 self.cutted_videos.append(f"{self.last_video_id}_{index}")
+            print('cut_video_by_scenes: DONE')
         except Exception as e:
             logging.error(e)
 
@@ -96,9 +106,12 @@ class NeoYoutuber(BaseModule):
             clips = [VideoFileClip(f"{self.path_to_intro}/intro.mp4")]
             shuffled_sub_videos = random.sample(self.cutted_videos, len(self.cutted_videos))
             for sub_video in shuffled_sub_videos:
-                clips.append(VideoFileClip(f"{self.path_to_cutted_videos}/{sub_video}.mp4"))
+                clips.append(VideoFileClip(f"{self.path_to_cutted_videos}/{sub_video}.mp4",
+                                           target_resolution=(1920, 1080)))
             final_result_video = concatenate_videoclips(clips=clips)
-            final_result_video.write_videofile(f"{self.path_to_final_result_videos}/new_{self.last_video_id}.mp4")
+            final_result_video.write_videofile(f"{self.path_to_final_result_videos}/new_{self.last_video_id}.mp4",
+                                               fps=30)
+            print('shuffle_and_create_new_video: DONE')
         except Exception as e:
             logging.error(e)
 
@@ -120,8 +133,7 @@ class NeoYoutuber(BaseModule):
         draw.rectangle(((width, 0), (width-10, height)), fill=rect_color)
         draw.rectangle(((0, height), (width, height - 10)), fill=rect_color)
 
-        with open(f'{os.getcwd()}/roubot_dabatase.json') as database:
-            data = json.load(database)
+        data = JsonDatabase.retrieve_database(json_file=self.database_table_name)
         data.get('neo_youtuber')['thumbnail_number'] += 1
         draw.text((30, height-50), f"FUNNY TIKTOK ANIMALS #{data.get('neo_youtuber').get('thumbnail_number')}",
                   text_color, font=font)
@@ -130,16 +142,17 @@ class NeoYoutuber(BaseModule):
         with open(f'{os.getcwd()}/roubot_dabatase.json', 'w') as database:
             json.dump(data, database)
 
+        print('create_new_thumbnail: DONE')
+
     def upload_to_youtuber(self):
-        pass
+        print("Upload not implemented yet")
 
     def update_database(self):
         try:
-            with open(f'{os.getcwd()}/roubot_dabatase.json') as database:
-                data = json.load(database)
+            data = JsonDatabase.retrieve_database(json_file=self.database_table_name)
             data.get('neo_youtuber').get('all_added_videos').append(self.last_video_id)
-            with open(f'{os.getcwd()}/roubot_dabatase.json', 'w') as database:
-                json.dump(data, database)
-            print('update_database')
+            data.get('neo_youtuber')['thumbnail_number'] += 1
+            JsonDatabase.update_database(data=data, json_file=self.database_table_name)
+            self.is_new_video = False
         except Exception as e:
             logging.error(e)
